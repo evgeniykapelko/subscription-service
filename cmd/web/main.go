@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/alexedwards/scs/redisstore"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gomodule/redigo/redis"
@@ -36,8 +37,21 @@ func main() {
 		Wait:     &wg,
 	}
 
+	app.serve()
 }
 
+func (app *Config) serve() {
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", webPort),
+		Handler: app.routes(),
+	}
+
+	app.InfoLog.Println("Starting server on port " + webPort)
+	err := srv.ListenAndServe()
+	if err != nil {
+		log.Panicf("Error starting server: %s", err)
+	}
+}
 func initDB() *sql.DB {
 	conn := connectToDB()
 	if conn == nil {
