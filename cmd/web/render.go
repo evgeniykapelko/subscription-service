@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var pathToTemplates = "./cmd/web/templates/"
+var pathToTemplates = "./cmd/web/templates"
 
 type TemplateData struct {
 	StringMap     map[string]string
@@ -35,7 +35,7 @@ func (app *Config) render(w http.ResponseWriter, r *http.Request, t string, td *
 	templateSlice = append(templateSlice, fmt.Sprintf("%s/%s", pathToTemplates, t))
 
 	for _, partial := range partials {
-		templateSlice = append(templateSlice, fmt.Sprintf("%s/%s", pathToTemplates, partial))
+		templateSlice = append(templateSlice, partial)
 	}
 
 	if td == nil {
