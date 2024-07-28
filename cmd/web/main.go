@@ -9,7 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/jackc/pgconn"
@@ -36,6 +38,8 @@ func main() {
 		ErrorLog: errorLog,
 		Wait:     &wg,
 	}
+
+	go app.listenForShutdown()
 
 	app.serve()
 }
@@ -121,4 +125,20 @@ func initRedis() *redis.Pool {
 	}
 
 	return redisPool
+}
+
+func (app *Config) listenForShutdown() {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	app.shutdown()
+	os.Exit(0)
+}
+
+func (app *Config) shutdown() {
+	app.InfoLog.Println("Would run cleanup tasks...")
+
+	app.Wait.Wait()
+
+	app.InfoLog.Println("Closing channels and shutting down application...")
 }
