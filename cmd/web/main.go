@@ -4,9 +4,6 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"fmt"
-	"github.com/alexedwards/scs/redisstore"
-	"github.com/alexedwards/scs/v2"
-	"github.com/gomodule/redigo/redis"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexedwards/scs/redisstore"
+	"github.com/alexedwards/scs/v2"
+	"github.com/gomodule/redigo/redis"
 	_ "github.com/jackc/pgconn"
 	_ "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -24,15 +24,22 @@ import (
 const webPort = "80"
 
 func main() {
+	// connect to the database
 	db := initDB()
 
+	// create sessions
 	session := initSession()
 
+	// create loggers
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
-	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog := log.New(os.Stdout, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
+	// create channels
+
+	// create waitgroup
 	wg := sync.WaitGroup{}
 
+	// set up the application config
 	app := Config{
 		Session:  session,
 		DB:       db,
@@ -42,32 +49,42 @@ func main() {
 		Models:   data.New(db),
 	}
 
+	// set up mail
+	app.Mailer = app.createMail()
+	go app.listenForMail()
+
+	// listen for signals
 	go app.listenForShutdown()
 
+	// listen for web connections
 	app.serve()
 }
 
 func (app *Config) serve() {
+	// start http server
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", webPort),
 		Handler: app.routes(),
 	}
 
-	app.InfoLog.Println("Starting server on port " + webPort)
+	app.InfoLog.Println("Starting web server...")
 	err := srv.ListenAndServe()
 	if err != nil {
-		log.Panicf("Error starting server: %s", err)
+		log.Panic(err)
 	}
 }
+
+// initDB connects to Postgres and returns a pool of connections
 func initDB() *sql.DB {
 	conn := connectToDB()
 	if conn == nil {
-		log.Panic("Could not connect to database")
+		log.Panic("can't connect to database")
 	}
-
 	return conn
 }
 
+// connectToDB tries to connect to postgres, and backs off until a connection
+// is made, or we have not connected after 10 tries
 func connectToDB() *sql.DB {
 	counts := 0
 
@@ -76,9 +93,9 @@ func connectToDB() *sql.DB {
 	for {
 		connection, err := openDB(dsn)
 		if err != nil {
-			log.Println("Postgres no yet ready...")
+			log.Println("postgres not yet ready...")
 		} else {
-			log.Println("Connected to database")
+			log.Print("connected to database!")
 			return connection
 		}
 
@@ -86,7 +103,7 @@ func connectToDB() *sql.DB {
 			return nil
 		}
 
-		log.Println("Waiting for database to become available...")
+		log.Print("Backing off for 1 second")
 		time.Sleep(1 * time.Second)
 		counts++
 
@@ -94,6 +111,8 @@ func connectToDB() *sql.DB {
 	}
 }
 
+// openDB opens a connection to Postgres, using a DSN read
+// from the environment variable DSN
 func openDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -108,9 +127,11 @@ func openDB(dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
+// initSession sets up a session, using Redis for session store
 func initSession() *scs.SessionManager {
 	gob.Register(data.User{})
 
+	// set up session
 	session := scs.New()
 	session.Store = redisstore.New(initRedis())
 	session.Lifetime = 24 * time.Hour
@@ -121,6 +142,8 @@ func initSession() *scs.SessionManager {
 	return session
 }
 
+// initRedis returns a pool of connections to Redis using the
+// environment variable REDIS
 func initRedis() *redis.Pool {
 	redisPool := &redis.Pool{
 		MaxIdle: 10,
@@ -141,9 +164,32 @@ func (app *Config) listenForShutdown() {
 }
 
 func (app *Config) shutdown() {
-	app.InfoLog.Println("Would run cleanup tasks...")
+	// perform any cleanup tasks
+	app.InfoLog.Println("would run cleanup tasks...")
 
+	// block until waitgroup is empty
 	app.Wait.Wait()
 
-	app.InfoLog.Println("Closing channels and shutting down application...")
+	app.InfoLog.Println("closing channels and shutting down application...")
+}
+
+func (app *Config) createMail() Mail {
+	errorChan := make(chan error)
+	mailerChan := make(chan Message, 100)
+	mailerDoneChan := make(chan bool)
+
+	m := Mail{
+		Domain:      "localhost",
+		Host:        "localhost",
+		Port:        1025,
+		Encryption:  "none",
+		FromName:    "Info",
+		FromAddress: "info@example.com",
+		Wait:        app.Wait,
+		ErrorChan:   errorChan,
+		MailerChan:  mailerChan,
+		DoneChan:    mailerDoneChan,
+	}
+
+	return m
 }

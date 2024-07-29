@@ -31,12 +31,27 @@ type Message struct {
 	To          string
 	Subject     string
 	Attachments []string
-	Date        any
+	Data        any
 	DataMap     map[string]any
 	Template    string
 }
 
+func (app *Config) listenForMail() {
+	for {
+		select {
+		case msg := <-app.Mailer.MailerChan:
+			go app.Mailer.SendMail(msg, app.Mailer.ErrorChan)
+		case err := <-app.Mailer.ErrorChan:
+			app.ErrorLog.Println(err)
+		case <-app.Mailer.DoneChan:
+			return
+		}
+	}
+}
+
 func (m *Mail) SendMail(msg Message, errorChan chan error) {
+	defer m.Wait.Done()
+
 	if msg.Template == "" {
 		msg.Template = "mail"
 	}
@@ -50,7 +65,7 @@ func (m *Mail) SendMail(msg Message, errorChan chan error) {
 	}
 
 	data := map[string]any{
-		"message": msg.Date,
+		"message": msg.Data,
 	}
 
 	msg.DataMap = data
