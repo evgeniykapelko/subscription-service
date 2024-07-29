@@ -3,11 +3,12 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/vanng822/go-premailer/premailer"
-	mail "github.com/xhit/go-simple-mail/v2"
 	"html/template"
 	"sync"
 	"time"
+
+	"github.com/vanng822/go-premailer/premailer"
+	mail "github.com/xhit/go-simple-mail/v2"
 )
 
 type Mail struct {
@@ -39,9 +40,9 @@ type Message struct {
 func (app *Config) listenForMail() {
 	for {
 		select {
-		case msg := <-app.Mailer.MailerChan:
-			go app.Mailer.SendMail(msg, app.Mailer.ErrorChan)
-		case err := <-app.Mailer.ErrorChan:
+		case msg := <- app.Mailer.MailerChan:
+			go app.Mailer.sendMail(msg, app.Mailer.ErrorChan)
+		case err := <- app.Mailer.ErrorChan:
 			app.ErrorLog.Println(err)
 		case <-app.Mailer.DoneChan:
 			return
@@ -49,9 +50,9 @@ func (app *Config) listenForMail() {
 	}
 }
 
-func (m *Mail) SendMail(msg Message, errorChan chan error) {
+func (m *Mail) sendMail(msg Message, errorChan chan error) {
 	defer m.Wait.Done()
-
+	
 	if msg.Template == "" {
 		msg.Template = "mail"
 	}
@@ -61,7 +62,7 @@ func (m *Mail) SendMail(msg Message, errorChan chan error) {
 	}
 
 	if msg.FromName == "" {
-		msg.FromName = m.FromAddress
+		msg.FromName = m.FromName
 	}
 
 	data := map[string]any{
@@ -70,11 +71,13 @@ func (m *Mail) SendMail(msg Message, errorChan chan error) {
 
 	msg.DataMap = data
 
+	// build html mail
 	formattedMessage, err := m.buildHTMLMessage(msg)
 	if err != nil {
 		errorChan <- err
 	}
 
+	// build plain text mail
 	plainMessage, err := m.buildPlainTextMessage(msg)
 	if err != nil {
 		errorChan <- err
@@ -122,9 +125,10 @@ func (m *Mail) buildHTMLMessage(msg Message) (string, error) {
 	}
 
 	var tpl bytes.Buffer
-	if err = t.ExecuteTemplate(&tpl, "body", msg); err != nil {
+	if err = t.ExecuteTemplate(&tpl, "body", msg.DataMap); err != nil {
 		return "", err
 	}
+
 	formattedMessage := tpl.String()
 	formattedMessage, err = m.inlineCSS(formattedMessage)
 	if err != nil {
@@ -143,7 +147,7 @@ func (m *Mail) buildPlainTextMessage(msg Message) (string, error) {
 	}
 
 	var tpl bytes.Buffer
-	if err = t.ExecuteTemplate(&tpl, "body", msg); err != nil {
+	if err = t.ExecuteTemplate(&tpl, "body", msg.DataMap); err != nil {
 		return "", err
 	}
 
@@ -154,8 +158,8 @@ func (m *Mail) buildPlainTextMessage(msg Message) (string, error) {
 
 func (m *Mail) inlineCSS(s string) (string, error) {
 	options := premailer.Options{
-		RemoveClasses:     false,
-		CssToAttributes:   false,
+		RemoveClasses: false,
+		CssToAttributes: false,
 		KeepBangImportant: true,
 	}
 
@@ -177,7 +181,7 @@ func (m *Mail) getEncryption(e string) mail.Encryption {
 	case "tls":
 		return mail.EncryptionSTARTTLS
 	case "ssl":
-		return mail.EncryptionSSL
+		return mail.EncryptionSSLTLS
 	case "none":
 		return mail.EncryptionNone
 	default:

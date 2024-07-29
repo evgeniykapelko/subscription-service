@@ -1,16 +1,21 @@
 package main
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"net/http"
 )
 
 func (app *Config) routes() http.Handler {
+	// create router
 	mux := chi.NewRouter()
+
+	// set up middleware
 	mux.Use(middleware.Recoverer)
 	mux.Use(app.SessionLoad)
 
+	// define application routes
 	mux.Get("/", app.HomePage)
 
 	mux.Get("/login", app.LoginPage)
@@ -18,28 +23,9 @@ func (app *Config) routes() http.Handler {
 	mux.Get("/logout", app.Logout)
 	mux.Get("/register", app.RegisterPage)
 	mux.Post("/register", app.PostRegisterPage)
-	mux.Get("/activate-account", app.ActivateAccount)
+	mux.Get("/activate", app.ActivateAccount)
 
-	//mux.Get("test-email", func(writer http.ResponseWriter, request *http.Request) {
-	//	m := Mail{
-	//		Domain:      "localhost",
-	//		Host:        "localhost",
-	//		Port:        1025,
-	//		Encryption:  "none",
-	//		FromAddress: "info@example.com",
-	//		FromName:    "info",
-	//		ErrorChan:   make(chan error),
-	//	}
-	//
-	//	msg := Message{
-	//		To:      "me@here.com",
-	//		Subject: "Welcome",
-	//		Data:    "Hello world!",
-	//	}
-	//
-	//	m.SendMail(msg, make(chan error))
-	//
-	//})
+	mux.Get("/plans", app.ChooseSubscription)
 
 	return mux
 }

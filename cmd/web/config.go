@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"github.com/alexedwards/scs/v2"
+	"final-project/data"
 	"log"
-	"subscription-service/data"
 	"sync"
+
+	"github.com/alexedwards/scs/v2"
 )
 
 type Config struct {
